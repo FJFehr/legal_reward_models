@@ -17,6 +17,22 @@ DEFAULT_PROMPT = "Tell me a joke."
 DEFAULT_OUTPUT_DIR = Path("data") / "vllm_outputs"
 
 
+def positive_int(value: str) -> int:
+    """Argparse type for integer values that must be >= 1."""
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be an integer >= 1")
+    return parsed
+
+
+def memory_utilization(value: str) -> float:
+    """Argparse type for GPU memory utilization in the range (0, 1]."""
+    parsed = float(value)
+    if parsed <= 0 or parsed > 1:
+        raise argparse.ArgumentTypeError("must be a float in the range (0, 1]")
+    return parsed
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Set up the four CLI arguments we actually need."""
     parser = argparse.ArgumentParser(
@@ -43,6 +59,39 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="Explicit markdown output path. Defaults under data/vllm_outputs/.",
+    )
+    parser.add_argument(
+        "--tensor-parallel-size",
+        type=positive_int,
+        default=1,
+        help="Tensor parallel degree for multi-GPU execution. Defaults to %(default)s.",
+    )
+    parser.add_argument(
+        "--dtype",
+        default="auto",
+        help="vLLM dtype setting (for example: auto, float16, bfloat16). Defaults to %(default)s.",
+    )
+    parser.add_argument(
+        "--max-model-len",
+        type=positive_int,
+        default=4096,
+        help="Maximum context length used by vLLM. Defaults to %(default)s.",
+    )
+    parser.add_argument(
+        "--gpu-memory-utilization",
+        type=memory_utilization,
+        default=0.9,
+        help="Fraction of GPU memory vLLM may use; range (0, 1]. Defaults to %(default)s.",
+    )
+    parser.add_argument(
+        "--enforce-eager",
+        action="store_true",
+        help="Enable eager mode to reduce startup latency (can reduce inference throughput).",
+    )
+    parser.add_argument(
+        "--quantization",
+        default=None,
+        help="Optional vLLM quantization mode (free-form pass-through, e.g. awq or gptq).",
     )
     return parser
 
@@ -111,13 +160,16 @@ def run_inference(
     now = clock() if clock is not None else datetime.now(UTC)
 
     # --- Build the vLLM engine config ---
-    # tensor_parallel_size=1 (single device) and dtype="auto" are hardcoded
-    # because we don't need multi-GPU or manual dtype control yet.
     engine_kwargs: dict[str, Any] = {
         "model": args.model,
-        "tensor_parallel_size": 1,
-        "dtype": "auto",
+        "tensor_parallel_size": args.tensor_parallel_size,
+        "dtype": args.dtype,
+        "max_model_len": args.max_model_len,
+        "gpu_memory_utilization": args.gpu_memory_utilization,
+        "enforce_eager": args.enforce_eager,
     }
+    if args.quantization is not None:
+        engine_kwargs["quantization"] = args.quantization
 
     # --- Sampling parameters (hardcoded sensible defaults) ---
     sampling_kwargs = {"temperature": 0.7, "top_p": 0.95, "max_tokens": 128}
@@ -150,6 +202,12 @@ def run_inference(
             "",
             f"- Model: `{args.model}`",
             f"- Device: `{args.device}`",
+            f"- Tensor parallel size: `{args.tensor_parallel_size}`",
+            f"- Dtype: `{args.dtype}`",
+            f"- Max model length: `{args.max_model_len}`",
+            f"- GPU memory utilization: `{args.gpu_memory_utilization}`",
+            f"- Enforce eager: `{args.enforce_eager}`",
+            f"- Quantization: `{args.quantization if args.quantization is not None else 'none'}`",
             f"- Generated at: `{now.isoformat()}`",
             "",
             "## Prompt",

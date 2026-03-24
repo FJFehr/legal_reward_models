@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+From: nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
 
 %files
     pyproject.toml /opt/legal-reward-models/pyproject.toml
@@ -32,10 +32,17 @@ From: nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
     export UV_TORCH_BACKEND=cu128
 
     # Build tools + core stack (vllm pulls in torch, transformers, accelerate, etc.)
-    uv pip install cmake ninja vllm
+    # Keep vLLM pinned and constrain cuda-python to a CUDA 12.8-compatible range.
+    uv pip install cmake ninja "vllm==0.18.0" "cuda-python>=12.8,<13"
 
     # Install the project package itself.
     uv pip install /opt/legal-reward-models
+
+
+    # Make everything readable/executable for non-root users on the cluster.
+    # uv installs Python under /root/ which is mode 700, so we need to open it.
+    chmod a+rx /root
+    chmod -R a+rX /opt/venv /root/.local
 
 %environment
     export PATH=/opt/venv/bin:/root/.local/bin:$PATH

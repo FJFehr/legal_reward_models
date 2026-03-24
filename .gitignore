@@ -16,3 +16,4 @@ dist/
 .env.*
 data/
 !data/.gitkeep
+*.sif

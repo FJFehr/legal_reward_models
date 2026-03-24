@@ -1,0 +1,52 @@
+Bootstrap: docker
+From: nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+
+%files
+    pyproject.toml /opt/legal-reward-models/pyproject.toml
+    scripts/ /opt/legal-reward-models/scripts/
+
+%post
+    set -eux
+
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        build-essential
+    rm -rf /var/lib/apt/lists/*
+
+    # uv
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="/root/.local/bin:${PATH}"
+
+    # Python env
+    uv python install 3.12
+    uv venv /opt/venv --python 3.12
+    export VIRTUAL_ENV=/opt/venv
+    export PATH="/opt/venv/bin:${PATH}"
+
+    # Use the CUDA 12.8 backend.
+    export UV_TORCH_BACKEND=cu128
+
+    # Build tools + core stack (vllm pulls in torch, transformers, accelerate, etc.)
+    uv pip install cmake ninja vllm
+
+    # Install the project package itself.
+    uv pip install /opt/legal-reward-models
+
+%environment
+    export PATH=/opt/venv/bin:/root/.local/bin:$PATH
+    export VIRTUAL_ENV=/opt/venv
+    export UV_TORCH_BACKEND=cu128
+
+%test
+    set -eux
+    /opt/venv/bin/python -V
+    cmake --version
+    ninja --version
+    /opt/venv/bin/python -c "import torch; print(torch.cuda.is_available()); print(torch.version.cuda)"
+    /opt/venv/bin/python -c "import vllm; print(vllm.__version__)"
+    /opt/venv/bin/python -c "import transformers; print(transformers.__version__)"

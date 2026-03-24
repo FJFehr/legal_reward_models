@@ -62,6 +62,7 @@ def test_run_inference_writes_markdown(tmp_path):
             return [SimpleNamespace(outputs=[SimpleNamespace(text="A short fake answer.")])]
 
     fixed_now = datetime(2026, 3, 24, 12, 0, tzinfo=UTC)
+    module.validate_tensor_parallel_configuration = lambda parsed_args: None
     result = module.run_inference(
         args,
         llm_cls=FakeLLM,
@@ -146,3 +147,92 @@ def test_ensure_requested_device_available_raises_on_unspecified_cpu():
 
     with pytest.raises(RuntimeError, match="CPU execution was requested"):
         module.ensure_requested_device_available("cpu", "")
+
+
+def test_validate_tensor_parallel_configuration_rejects_invalid_divisibility():
+    module = load_module()
+    parser = module.build_parser()
+    args = parser.parse_args(
+        [
+            "--model",
+            "Qwen/Qwen3.5-0.8B",
+            "--device",
+            "cuda",
+            "--tensor-parallel-size",
+            "3",
+        ]
+    )
+
+    module.visible_cuda_device_count = lambda: 4
+    module.load_tensor_parallel_constraints = lambda model: (16, 8)
+
+    with pytest.raises(
+        RuntimeError,
+        match="Valid --tensor-parallel-size values: \\[1, 2, 4, 8\\]",
+    ):
+        module.validate_tensor_parallel_configuration(args)
+
+
+def test_validate_tensor_parallel_configuration_rejects_insufficient_visible_gpus():
+    module = load_module()
+    parser = module.build_parser()
+    args = parser.parse_args(
+        [
+            "--model",
+            "Qwen/Qwen3.5-0.8B",
+            "--device",
+            "cuda",
+            "--tensor-parallel-size",
+            "4",
+        ]
+    )
+
+    module.visible_cuda_device_count = lambda: 2
+
+    with pytest.raises(RuntimeError, match="requires at least 4 visible CUDA devices"):
+        module.validate_tensor_parallel_configuration(args)
+
+
+def test_run_inference_valid_tensor_parallel_cuda_path(tmp_path):
+    module = load_module()
+    parser = module.build_parser()
+    output_path = tmp_path / "valid_tp.md"
+    args = parser.parse_args(
+        [
+            "--model",
+            "Qwen/Qwen3.5-0.8B",
+            "--prompt",
+            "hello",
+            "--device",
+            "cuda",
+            "--output-md",
+            str(output_path),
+            "--tensor-parallel-size",
+            "2",
+        ]
+    )
+
+    class FakeSamplingParams:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class FakeLLM:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            FakeLLM.created_with = kwargs
+
+        def generate(self, prompts, sampling_params):
+            return [SimpleNamespace(outputs=[SimpleNamespace(text="ok")])]
+
+    module.visible_cuda_device_count = lambda: 2
+    module.load_tensor_parallel_constraints = lambda model: (16, 8)
+
+    result = module.run_inference(
+        args,
+        llm_cls=FakeLLM,
+        sampling_params_cls=FakeSamplingParams,
+        clock=lambda: datetime(2026, 3, 24, 12, 0, tzinfo=UTC),
+    )
+
+    assert result["output_text"] == "ok"
+    assert FakeLLM.created_with["tensor_parallel_size"] == 2

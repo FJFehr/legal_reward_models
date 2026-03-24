@@ -58,7 +58,11 @@ sudo apt-get install -y singularity-ce
 ### Building
 
 ```bash
+# Default backend (CUDA 12.8 wheels)
 bash container/build.sh
+
+# Compatibility profile (CUDA 12.1 wheels)
+bash container/build.sh cu121
 ```
 
 If you don't have root or fakeroot on the cluster, build locally then copy the `.sif` over:
@@ -91,7 +95,7 @@ The `--nv` flag passes through host NVIDIA drivers and GPUs. Bind-mount director
 singularity exec --nv --bind ./data:/opt/legal-reward-models/data container/llm.sif python scripts/my_script.py
 ```
 
-See `container/llm.def` for the full definition. The image uses CUDA 12.8 (`cu128`) by default; switch to CUDA 12.1 (`cu121`) if you hit wheel compatibility issues.
+See `container/llm.def` for the full definition. The image uses CUDA 12.8 (`cu128`) by default; pass `cu121` to `container/build.sh` if cluster runtime compatibility is better with CUDA 12.1 wheels.
 
 ### vLLM inference tuning
 
@@ -115,15 +119,17 @@ singularity exec --nv container/llm.sif python scripts/run_vllm_inference.py \
   --prompt "Hello from vLLM"
 ```
 
-Examples: run tensor parallelism on 3, 4, or 8 GPUs.
+Tensor-parallel rule: `--tensor-parallel-size` must divide the model's attention head counts (and KV head counts when present). For `Qwen/Qwen3.5-0.8B` (`num_attention_heads=16`), valid values are `1, 2, 4, 8, 16`.
+
+Examples: run tensor parallelism on 2, 4, or 8 GPUs.
 
 ```bash
-# 3 GPUs
+# 2 GPUs
 singularity exec --nv container/llm.sif bash -lc \
-  'CUDA_VISIBLE_DEVICES=0,1,2 python scripts/run_vllm_inference.py \
+  'CUDA_VISIBLE_DEVICES=0,1 python scripts/run_vllm_inference.py \
   --model Qwen/Qwen3.5-0.8B \
   --device cuda \
-  --tensor-parallel-size 3 \
+  --tensor-parallel-size 2 \
   --max-model-len 4096 \
   --gpu-memory-utilization 0.9'
 
@@ -166,6 +172,32 @@ singularity exec --nv container/llm.sif python scripts/run_vllm_inference.py \
   --max-model-len 4096 \
   --gpu-memory-utilization 0.9 \
   --quantization awq
+```
+
+### Troubleshooting NCCL init crashes
+
+If multi-GPU startup fails in NCCL initialization (`ncclCommInitRank`/segfault):
+
+1. Run the smoke test first:
+
+```bash
+bash container/smoke_test_gpu.sh
+```
+
+The smoke script now includes a 2-GPU NCCL all-reduce check when at least two GPUs are visible.
+
+2. Retry inference with conservative NCCL settings:
+
+```bash
+singularity exec --nv container/llm.sif bash -lc \
+  'NCCL_CUMEM_ENABLE=0 NCCL_P2P_DISABLE=1 NCCL_DEBUG=INFO \
+   python scripts/run_vllm_inference.py --model Qwen/Qwen3.5-0.8B --device cuda --tensor-parallel-size 2'
+```
+
+3. If `cu128` remains unstable on your cluster nodes, rebuild with the `cu121` profile:
+
+```bash
+bash container/build.sh cu121
 ```
 
 ## Working in this repo

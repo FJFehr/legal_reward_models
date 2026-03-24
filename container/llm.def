@@ -28,7 +28,7 @@ From: nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
     export VIRTUAL_ENV=/opt/venv
     export PATH="/opt/venv/bin:${PATH}"
 
-    # Use the CUDA 12.8 backend.
+    # Default backend is cu128. container/build.sh can render this to cu121.
     export UV_TORCH_BACKEND=cu128
 
     # Build tools + core stack (vllm pulls in torch, transformers, accelerate, etc.)
@@ -47,6 +47,7 @@ From: nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
 %environment
     export PATH=/opt/venv/bin:/root/.local/bin:$PATH
     export VIRTUAL_ENV=/opt/venv
+    # Default backend is cu128. container/build.sh can render this to cu121.
     export UV_TORCH_BACKEND=cu128
 
 %test

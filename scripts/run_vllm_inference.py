@@ -17,6 +17,110 @@ DEFAULT_PROMPT = "Tell me a joke."
 DEFAULT_OUTPUT_DIR = Path("data") / "vllm_outputs"
 
 
+def _positive_divisors(value: int) -> list[int]:
+    """Return all positive divisors for a positive integer."""
+    if value < 1:
+        return []
+    return [candidate for candidate in range(1, value + 1) if value % candidate == 0]
+
+
+def _first_int_attr(obj: object, names: Sequence[str]) -> int | None:
+    """Return the first integer attribute found on obj from names."""
+    for name in names:
+        value = getattr(obj, name, None)
+        if isinstance(value, int):
+            return value
+    return None
+
+
+def visible_cuda_device_count() -> int:
+    """Detect the number of CUDA devices visible to this process."""
+    try:
+        import torch
+    except ImportError as exc:
+        raise RuntimeError(
+            "Could not import torch to count visible CUDA devices while `--device cuda` "
+            "was requested. Ensure the environment has a CUDA-enabled torch installation."
+        ) from exc
+    return int(torch.cuda.device_count())
+
+
+def load_tensor_parallel_constraints(model: str) -> tuple[int, int | None]:
+    """Read model head counts used to validate tensor parallel divisibility."""
+    try:
+        from transformers import AutoConfig
+    except ImportError as exc:
+        raise RuntimeError(
+            "Could not import transformers to inspect model config for tensor parallel "
+            "validation. Install transformers in this environment and retry."
+        ) from exc
+
+    try:
+        config = AutoConfig.from_pretrained(model, trust_remote_code=False)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to load model config for `{model}` during tensor parallel preflight. "
+            "Check model id/network access and retry."
+        ) from exc
+
+    candidates: list[object] = [config]
+    text_config = getattr(config, "text_config", None)
+    if text_config is not None:
+        candidates.append(text_config)
+
+    for candidate in candidates:
+        attn_heads = _first_int_attr(
+            candidate,
+            ("num_attention_heads", "n_head", "n_heads", "num_heads"),
+        )
+        if attn_heads is None:
+            continue
+        kv_heads = _first_int_attr(
+            candidate,
+            ("num_key_value_heads", "n_kv_head", "num_kv_heads"),
+        )
+        return attn_heads, kv_heads
+
+    raise RuntimeError(
+        f"Could not infer attention head metadata from `{model}` config, so tensor "
+        "parallel divisibility cannot be validated."
+    )
+
+
+def validate_tensor_parallel_configuration(args: argparse.Namespace) -> None:
+    """Fail fast on invalid multi-GPU tensor parallel configuration."""
+    tp_size = args.tensor_parallel_size
+    if tp_size <= 1 or args.device != "cuda":
+        return
+
+    visible_gpus = visible_cuda_device_count()
+    if visible_gpus < tp_size:
+        raise RuntimeError(
+            f"`--tensor-parallel-size {tp_size}` requires at least {tp_size} visible CUDA "
+            f"devices, but only {visible_gpus} are visible to this process. "
+            "Adjust `CUDA_VISIBLE_DEVICES` or lower `--tensor-parallel-size`."
+        )
+
+    attn_heads, kv_heads = load_tensor_parallel_constraints(args.model)
+    constrained_heads = [attn_heads]
+    if kv_heads is not None:
+        constrained_heads.append(kv_heads)
+
+    max_constraint = max(constrained_heads)
+    valid_tp_sizes = [
+        candidate
+        for candidate in _positive_divisors(max_constraint)
+        if all(head_count % candidate == 0 for head_count in constrained_heads)
+    ]
+    if tp_size not in valid_tp_sizes:
+        kv_details = f", num_key_value_heads={kv_heads}" if kv_heads is not None else ""
+        raise RuntimeError(
+            f"Invalid `--tensor-parallel-size {tp_size}` for model `{args.model}`: "
+            f"num_attention_heads={attn_heads}{kv_details}. "
+            f"Valid --tensor-parallel-size values: {valid_tp_sizes}."
+        )
+
+
 def positive_int(value: str) -> int:
     """Argparse type for integer values that must be >= 1."""
     parsed = int(value)
@@ -149,6 +253,8 @@ def run_inference(
     # "auto" means let vLLM decide (GPU if available, else CPU).
     if args.device != "auto":
         os.environ["VLLM_TARGET_DEVICE"] = args.device
+
+    validate_tensor_parallel_configuration(args)
 
     # --- Load vLLM if no test doubles were injected ---
     if llm_cls is None or sampling_params_cls is None:

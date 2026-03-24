@@ -34,7 +34,7 @@ uv run pytest tests/
 | `AGENTS.md` | Operating contract for coding agents |
 | `tasks/` | Task briefs by type: feature, refactor, debug |
 | `orchestrator_prompt.md` | Prompt template for dispatching agent tasks |
-| `container/` | Apptainer definition files and build/test scripts |
+| `container/` | Singularity definition files and build/test scripts |
 
 ### Read order
 
@@ -45,14 +45,14 @@ uv run pytest tests/
 
 ## Container
 
-Requires [Apptainer](https://apptainer.org/docs/admin/main/installation.html) (formerly Singularity).
+Requires [Singularity](https://docs.sylabs.io/guides/latest/admin-guide/installation.html) (or its successor Apptainer — same commands).
 
 ```bash
-# Install Apptainer (Ubuntu/Debian)
+# Install Singularity (Ubuntu/Debian)
 sudo apt-get install -y software-properties-common
 sudo add-apt-repository -y ppa:apptainer/ppa
 sudo apt-get update
-sudo apt-get install -y apptainer
+sudo apt-get install -y singularity-ce
 
 # Build GPU image (CUDA 12.8, default)
 bash container/build.sh gpu
@@ -69,23 +69,23 @@ bash container/smoke_test_cpu.sh
 
 ### Using the container
 
-Run any script with `apptainer exec`:
+Run any script with `singularity exec`:
 
 ```bash
 # GPU
-apptainer exec --nv container/llm.sif python scripts/run_vllm_inference.py --model Qwen/Qwen3.5-0.8B --device cuda
+singularity exec --nv container/llm.sif python scripts/run_vllm_inference.py --model Qwen/Qwen3.5-0.8B --device cuda
 
 # CPU
-apptainer exec container/llm-cpu.sif python scripts/run_vllm_inference.py --model Qwen/Qwen3.5-0.8B --device cpu
+singularity exec container/llm-cpu.sif python scripts/run_vllm_inference.py --model Qwen/Qwen3.5-0.8B --device cpu
 
 # Interactive shell
-apptainer shell --nv container/llm.sif
+singularity shell --nv container/llm.sif
 ```
 
 The `--nv` flag passes through host NVIDIA drivers and GPUs — use it with the GPU image, omit it with the CPU image. Bind-mount directories to persist outputs:
 
 ```bash
-apptainer exec --nv --bind ./data:/opt/legal-reward-models/data container/llm.sif python scripts/my_script.py
+singularity exec --nv --bind ./data:/opt/legal-reward-models/data container/llm.sif python scripts/my_script.py
 ```
 
 See `container/llm.def` (GPU) and `container/llm-cpu.def` (CPU) for the full definitions. The GPU image uses CUDA 12.8 (`cu128`) by default; switch to CUDA 12.1 (`cu121`) if you hit wheel compatibility issues.

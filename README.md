@@ -53,18 +53,25 @@ sudo apt-get install -y software-properties-common
 sudo add-apt-repository -y ppa:apptainer/ppa
 sudo apt-get update
 sudo apt-get install -y singularity-ce
+```
 
-# Build GPU image (CUDA 12.8, default)
-bash container/build.sh gpu
+### Building
 
-# Build CPU image (for prototyping without a GPU)
-bash container/build.sh cpu
+```bash
+bash container/build.sh
+```
 
-# Smoke-test on a GPU node
+If you don't have root or fakeroot on the cluster, build locally then copy the `.sif` over:
+
+```bash
+sudo bash container/build.sh
+scp container/llm.sif <user>@<cluster>:<project-path>/container/
+```
+
+### Smoke test
+
+```bash
 bash container/smoke_test_gpu.sh
-
-# Smoke-test CPU image
-bash container/smoke_test_cpu.sh
 ```
 
 ### Using the container
@@ -72,23 +79,94 @@ bash container/smoke_test_cpu.sh
 Run any script with `singularity exec`:
 
 ```bash
-# GPU
 singularity exec --nv container/llm.sif python scripts/run_vllm_inference.py --model Qwen/Qwen3.5-0.8B --device cuda
-
-# CPU
-singularity exec container/llm-cpu.sif python scripts/run_vllm_inference.py --model Qwen/Qwen3.5-0.8B --device cpu
 
 # Interactive shell
 singularity shell --nv container/llm.sif
 ```
 
-The `--nv` flag passes through host NVIDIA drivers and GPUs — use it with the GPU image, omit it with the CPU image. Bind-mount directories to persist outputs:
+The `--nv` flag passes through host NVIDIA drivers and GPUs. Bind-mount directories to persist outputs:
 
 ```bash
 singularity exec --nv --bind ./data:/opt/legal-reward-models/data container/llm.sif python scripts/my_script.py
 ```
 
-See `container/llm.def` (GPU) and `container/llm-cpu.def` (CPU) for the full definitions. The GPU image uses CUDA 12.8 (`cu128`) by default; switch to CUDA 12.1 (`cu121`) if you hit wheel compatibility issues.
+See `container/llm.def` for the full definition. The image uses CUDA 12.8 (`cu128`) by default; switch to CUDA 12.1 (`cu121`) if you hit wheel compatibility issues.
+
+### vLLM inference tuning
+
+`scripts/run_vllm_inference.py` supports additional vLLM engine controls:
+
+- `--tensor-parallel-size` (multi-GPU tensor parallelism)
+- `--dtype` (for example: `auto`, `float16`, `bfloat16`)
+- `--max-model-len` (reduce KV cache memory pressure)
+- `--gpu-memory-utilization` (range `(0, 1]`)
+- `--enforce-eager` (faster startup, possible throughput tradeoff)
+- `--quantization` (free-form vLLM quantization mode)
+
+Example: fit smaller models on a single 24 GiB GPU by limiting context length.
+
+```bash
+singularity exec --nv container/llm.sif python scripts/run_vllm_inference.py \
+  --model Qwen/Qwen3.5-0.8B \
+  --device cuda \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.9 \
+  --prompt "Hello from vLLM"
+```
+
+Examples: run tensor parallelism on 3, 4, or 8 GPUs.
+
+```bash
+# 3 GPUs
+singularity exec --nv container/llm.sif bash -lc \
+  'CUDA_VISIBLE_DEVICES=0,1,2 python scripts/run_vllm_inference.py \
+  --model Qwen/Qwen3.5-0.8B \
+  --device cuda \
+  --tensor-parallel-size 3 \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.9'
+
+# 4 GPUs
+singularity exec --nv container/llm.sif bash -lc \
+  'CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/run_vllm_inference.py \
+  --model Qwen/Qwen3.5-0.8B \
+  --device cuda \
+  --tensor-parallel-size 4 \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.9'
+
+# 8 GPUs
+singularity exec --nv container/llm.sif bash -lc \
+  'CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python scripts/run_vllm_inference.py \
+  --model Qwen/Qwen3.5-0.8B \
+  --device cuda \
+  --tensor-parallel-size 8 \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.9'
+```
+
+Optional: reduce startup latency with eager mode.
+
+```bash
+singularity exec --nv container/llm.sif python scripts/run_vllm_inference.py \
+  --model Qwen/Qwen3.5-0.8B \
+  --device cuda \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.9 \
+  --enforce-eager
+```
+
+Optional: run a quantized checkpoint when supported by the model.
+
+```bash
+singularity exec --nv container/llm.sif python scripts/run_vllm_inference.py \
+  --model <quantized-model-id> \
+  --device cuda \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.9 \
+  --quantization awq
+```
 
 ## Working in this repo
 

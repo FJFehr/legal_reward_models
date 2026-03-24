@@ -7,7 +7,8 @@ This repository is designed to be used with multiple coding agents. Treat this f
 When instructions conflict, follow this order:
 1. This file (`AGENTS.md`)
 2. The relevant task brief in `tasks/`
-3. `README.md`
+3. `orchestrator_prompt.md`
+4. `README.md`
 
 Before making changes, read the applicable files in the order above, plus any files directly related to the change.
 
@@ -55,6 +56,10 @@ If requirements, code paths, or expected behaviour are ambiguous:
 - Do not commit generated files (`*.egg-info/`, `.venv/`, `__pycache__/`, etc.). Check `.gitignore` before staging.
 - For ML artifacts (model weights, datasets, large outputs), use Git LFS or store them outside the repo. Never commit files over 500 KB without justification.
 - Write concise commit messages that explain *why*, not *what*. One logical change per commit.
+
+## README
+
+Before every commit, check whether `README.md` needs updating. If new files, directories, scripts, or functionality have been added or removed, update the repository layout table and any relevant sections so the README stays accurate.
 
 ## Validation
 

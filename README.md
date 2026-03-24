@@ -25,6 +25,10 @@ uv run pytest tests/
 
 | Path | Role |
 |------|------|
+| `scripts/` | Runnable scripts (e.g. vLLM inference) |
+| `notebooks/` | Jupyter notebooks for data exploration and EDA |
+| `tests/` | Pytest test suite |
+| `data/` | Local data directory (git-ignored, kept via `.gitkeep`) |
 | `AGENTS.md` | Operating contract for coding agents |
 | `tasks/` | Task briefs by type: feature, refactor, debug |
 | `orchestrator_prompt.md` | Prompt template for dispatching agent tasks |

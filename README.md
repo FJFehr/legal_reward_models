@@ -32,7 +32,7 @@ uv run pytest tests/
 | `tests/` | Pytest test suite |
 | `data/` | Local data directory (git-ignored, kept via `.gitkeep`) |
 | `.agents/` | Agent operating contract — rules, style, prompt template, and task briefs (see below) |
-| `container/` | Singularity definition files and build/test scripts |
+| `container/` | Apptainer/Singularity definition files and build/test scripts |
 
 ## Agentic workflow
 
@@ -76,14 +76,21 @@ The agent will then follow the matching task brief (`tasks/feature.md` in this c
 
 ## Container
 
-Requires [Singularity](https://docs.sylabs.io/guides/latest/admin-guide/installation.html) (or its successor Apptainer — same commands).
+Requires [Apptainer](https://apptainer.org/docs/admin/main/installation.html) (the successor to Singularity — same commands, same `.sif` format).
 
 ```bash
-# Install Singularity (Ubuntu/Debian)
+# Install Apptainer (Ubuntu/Debian)
 sudo apt-get install -y software-properties-common
 sudo add-apt-repository -y ppa:apptainer/ppa
 sudo apt-get update
-sudo apt-get install -y singularity-ce
+sudo apt-get install -y apptainer
+
+# Or install in userspace (no root needed)
+curl -s https://raw.githubusercontent.com/apptainer/apptainer/main/tools/install-unprivileged.sh | bash -s - ~/.local/apptainer
+
+# Add to ~/.bashrc so apptainer is always on PATH
+echo 'export PATH=~/.local/apptainer/bin:$PATH' >> ~/.bashrc
+source ~/.bashrc
 ```
 
 ### Building
@@ -111,19 +118,19 @@ bash container/smoke_test_gpu.sh
 
 ### Using the container
 
-Run any script with `singularity exec`:
+Run any script with `apptainer exec`:
 
 ```bash
-singularity exec --nv container/llm.sif python scripts/run_vllm_inference.py --model Qwen/Qwen3.5-0.8B --device cuda
+apptainer exec --nv container/llm.sif python scripts/run_vllm_inference.py --model Qwen/Qwen3.5-0.8B --device cuda
 
 # Interactive shell
-singularity shell --nv container/llm.sif
+apptainer shell --nv container/llm.sif
 ```
 
 The `--nv` flag passes through host NVIDIA drivers and GPUs. Bind-mount directories to persist outputs:
 
 ```bash
-singularity exec --nv --bind ./data:/opt/legal-reward-models/data container/llm.sif python scripts/my_script.py
+apptainer exec --nv --bind ./data:/opt/legal-reward-models/data container/llm.sif python scripts/my_script.py
 ```
 
 See `container/llm.def` for the full definition. The image uses CUDA 12.8 (`cu128`) by default; pass `cu121` to `container/build.sh` if cluster runtime compatibility is better with CUDA 12.1 wheels.
@@ -142,7 +149,7 @@ See `container/llm.def` for the full definition. The image uses CUDA 12.8 (`cu12
 Example: fit smaller models on a single 24 GiB GPU by limiting context length.
 
 ```bash
-singularity exec --nv container/llm.sif python scripts/run_vllm_inference.py \
+apptainer exec --nv container/llm.sif python scripts/run_vllm_inference.py \
   --model Qwen/Qwen3.5-0.8B \
   --device cuda \
   --max-model-len 4096 \
@@ -156,7 +163,7 @@ Examples: run tensor parallelism on 2, 4, or 8 GPUs.
 
 ```bash
 # 2 GPUs
-singularity exec --nv container/llm.sif bash -lc \
+apptainer exec --nv container/llm.sif bash -lc \
   'CUDA_VISIBLE_DEVICES=0,1 python scripts/run_vllm_inference.py \
   --model Qwen/Qwen3.5-0.8B \
   --device cuda \
@@ -165,7 +172,7 @@ singularity exec --nv container/llm.sif bash -lc \
   --gpu-memory-utilization 0.9'
 
 # 4 GPUs
-singularity exec --nv container/llm.sif bash -lc \
+apptainer exec --nv container/llm.sif bash -lc \
   'CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/run_vllm_inference.py \
   --model Qwen/Qwen3.5-0.8B \
   --device cuda \
@@ -174,7 +181,7 @@ singularity exec --nv container/llm.sif bash -lc \
   --gpu-memory-utilization 0.9'
 
 # 8 GPUs
-singularity exec --nv container/llm.sif bash -lc \
+apptainer exec --nv container/llm.sif bash -lc \
   'CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python scripts/run_vllm_inference.py \
   --model Qwen/Qwen3.5-0.8B \
   --device cuda \
@@ -186,7 +193,7 @@ singularity exec --nv container/llm.sif bash -lc \
 Optional: reduce startup latency with eager mode.
 
 ```bash
-singularity exec --nv container/llm.sif python scripts/run_vllm_inference.py \
+apptainer exec --nv container/llm.sif python scripts/run_vllm_inference.py \
   --model Qwen/Qwen3.5-0.8B \
   --device cuda \
   --max-model-len 4096 \
@@ -197,7 +204,7 @@ singularity exec --nv container/llm.sif python scripts/run_vllm_inference.py \
 Optional: run a quantized checkpoint when supported by the model.
 
 ```bash
-singularity exec --nv container/llm.sif python scripts/run_vllm_inference.py \
+apptainer exec --nv container/llm.sif python scripts/run_vllm_inference.py \
   --model <quantized-model-id> \
   --device cuda \
   --max-model-len 4096 \
@@ -220,7 +227,7 @@ The smoke script now includes a 2-GPU NCCL all-reduce check when at least two GP
 2. Retry inference with conservative NCCL settings:
 
 ```bash
-singularity exec --nv container/llm.sif bash -lc \
+apptainer exec --nv container/llm.sif bash -lc \
   'NCCL_CUMEM_ENABLE=0 NCCL_P2P_DISABLE=1 NCCL_DEBUG=INFO \
    python scripts/run_vllm_inference.py --model Qwen/Qwen3.5-0.8B --device cuda --tensor-parallel-size 2'
 ```

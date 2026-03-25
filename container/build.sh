@@ -19,4 +19,4 @@ sed "s/export UV_TORCH_BACKEND=cu128/export UV_TORCH_BACKEND=${UV_BACKEND}/g" \
     container/llm.def > "$TMP_DEF"
 
 echo "Building container with UV_TORCH_BACKEND=${UV_BACKEND}"
-singularity build container/llm.sif "$TMP_DEF"
+apptainer build container/llm.sif "$TMP_DEF"

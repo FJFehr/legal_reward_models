@@ -6,9 +6,12 @@ This repository is designed to be used with multiple coding agents. Treat this f
 
 When instructions conflict, follow this order:
 1. This file (`AGENTS.md`)
-2. The relevant task brief in `tasks/`
-3. `orchestrator_prompt.md`
-4. `README.md`
+2. `STYLE.md`
+3. `PROMPT_TEMPLATE.md`
+4. The relevant task brief in `tasks/`
+5. `README.md`
+
+All paths above are relative to this `.agents/` directory unless otherwise noted.
 
 Before making changes, read the applicable files in the order above, plus any files directly related to the change.
 
@@ -29,16 +32,17 @@ Use the task brief that matches the kind of work being done:
 - `tasks/refactor.md` for internal code improvements without changing behaviour
 - `tasks/debug.md` for diagnosing and fixing bugs
 
-Do not assume these files are exhaustive. They are the work instructions for the current task, not the project rules.
+Task briefs define the **process** for each task type. The rules below apply to all tasks.
 
 ## Working rules
 
-- Follow the existing style of the repository unless the task explicitly asks for a change.
-- Prefer straightforward implementations.
-- Do not introduce new dependencies unless they are clearly justified.
+- Follow `STYLE.md` and the existing style of the repository unless the task explicitly asks for a change.
+- Make the smallest change that solves the problem.
+- Preserve existing behaviour unless the task explicitly changes it.
+- Do not introduce new dependencies unless clearly justified.
 - Avoid unrelated clean-up. Do not rename or move files unless the task requests it.
 - Keep changes local unless the task requires a broader edit. Before editing, state which files you expect to change.
-- Preserve existing behaviour unless the task explicitly changes it.
+- No speculative additions — do not add features, abstractions, or refactors beyond what was asked.
 - If the task is proposal-only or asks for a plan, do not make file edits or run mutating commands.
 
 ## When uncertain
@@ -61,7 +65,7 @@ If requirements, code paths, or expected behaviour are ambiguous:
 
 Before every commit, check whether `README.md` needs updating. If new files, directories, scripts, or functionality have been added or removed, update the repository layout table and any relevant sections so the README stays accurate.
 
-## Validation
+## Verification
 
 Before finishing, check your work in a way appropriate to the change:
 - Run tests if available and relevant.
@@ -72,12 +76,11 @@ Before finishing, check your work in a way appropriate to the change:
 
 ## Response format
 
-When reporting back, keep it short and structured:
+Every response uses these base fields. Task briefs may add task-specific fields.
 
-- **Changed**: what you changed
-- **Why**: why you changed it
-- **Verified**: what you verified and how
-- **Uncertain**: any remaining risks, assumptions, or gaps in verification
+- **Summary**: what changed and why
+- **Verification**: what was checked and how
+- **Risks / unknowns**: remaining assumptions, gaps, or follow-ups
 
 ## Coordination note
 

@@ -1,6 +1,6 @@
-# Orchestrator Prompt
+# Prompt Template
 
-Instruction precedence: AGENTS.md > this prompt > task brief > README.md
+Fill in the fields below when dispatching a task to an agent.
 
 ## Required fields
 
@@ -18,14 +18,6 @@ Instruction precedence: AGENTS.md > this prompt > task brief > README.md
 
 - `propose-only` — plan and explain only. Do not edit files or run mutating commands.
 - `implement` — plan, then make the changes, then verify.
-
-## Ambiguity rule
-
-Do not ask for clarification on every uncertainty. Ask only when the ambiguity could materially affect correctness and you cannot resolve it conservatively. Otherwise: state the assumption, proceed, and flag it in the response.
-
-## Output format
-
-Follow the output format in the relevant task brief (`tasks/<type>.md`).
 
 ---
 

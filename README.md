@@ -31,17 +31,48 @@ uv run pytest tests/
 | `notebooks/` | Jupyter notebooks for data exploration and EDA |
 | `tests/` | Pytest test suite |
 | `data/` | Local data directory (git-ignored, kept via `.gitkeep`) |
-| `AGENTS.md` | Operating contract for coding agents |
-| `tasks/` | Task briefs by type: feature, refactor, debug |
-| `orchestrator_prompt.md` | Prompt template for dispatching agent tasks |
+| `.agents/` | Agent operating contract — rules, style, prompt template, and task briefs (see below) |
 | `container/` | Singularity definition files and build/test scripts |
 
-### Read order
+## Agentic workflow
 
-1. `AGENTS.md` — rules and priorities
-2. The relevant `tasks/*.md` brief
-3. `orchestrator_prompt.md` — how tasks are dispatched
-4. This file — setup and project overview
+The `.agents/` folder is a portable operating contract for coding agents (Claude Code, Copilot, Cursor, or any LLM-based tool). It defines how agents should behave, what style to follow, and how tasks are structured — so you get consistent, reviewable output regardless of which agent runs the work.
+
+### What's inside
+
+| File | Purpose |
+|------|---------|
+| `AGENTS.md` | The root contract — repo priorities, working rules, version control policy, verification steps, and response format. Every agent reads this first. |
+| `STYLE.md` | Coding style guide — naming, formatting, modularity, error handling, tests. |
+| `PROMPT_TEMPLATE.md` | A fill-in template for dispatching tasks to an agent. |
+| `tasks/feature.md` | Process guide for adding new functionality. |
+| `tasks/debug.md` | Process guide for diagnosing and fixing bugs. |
+| `tasks/refactor.md` | Process guide for restructuring code without changing behaviour. |
+
+Agents read files in precedence order: `AGENTS.md` > `STYLE.md` > `PROMPT_TEMPLATE.md` > task brief > `README.md`. When instructions conflict, higher-precedence files win.
+
+### How to prompt an agent
+
+Copy the template from `PROMPT_TEMPLATE.md` and fill in the fields:
+
+```
+Task type: feature
+Mode: implement
+Objective: Add a --dry-run flag to the training script that skips writing checkpoints.
+Acceptance criteria: Running with --dry-run completes without writing to disk. Existing runs unaffected.
+Constraints: Do not change the checkpoint format or add new dependencies.
+Known unknowns: Unclear whether eval should also be skipped; assume no.
+Relevant files: train.py, tasks/feature.md
+Out-of-scope files: data/, tests/ (read only)
+Verification: uv run python train.py --dry-run exits cleanly; existing tests pass.
+```
+
+The agent will then follow the matching task brief (`tasks/feature.md` in this case) for its process, apply the working rules from `AGENTS.md`, and respond using the structured output format.
+
+**Tips:**
+- Set **Mode** to `propose-only` when you want a plan without code changes.
+- Use **Constraints** and **Out-of-scope files** to keep the agent focused.
+- The **Known unknowns** field lets the agent handle ambiguity explicitly rather than guessing silently.
 
 ## Container
 
@@ -202,4 +233,4 @@ bash container/build.sh cu121
 
 ## Working in this repo
 
-See `AGENTS.md` for coding conventions and task workflow.
+See the [Agentic workflow](#agentic-workflow) section above and `.agents/AGENTS.md` for the full operating contract.
